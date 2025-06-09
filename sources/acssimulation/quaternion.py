@@ -2,7 +2,7 @@ import numpy as np
 
 def simulate_attitude(I, omega0, q0, M, dt, T):
     """
-    Simula a evolução da atitude de um corpo rígido usando quaternions.
+    Simula a evolução da atitude de um corpo rígido usando quaternions com integração RK4.
 
     Parâmetros:
     - I: array-like, [Ixx, Iyy, Izz] (kg*m²)
@@ -27,37 +27,45 @@ def simulate_attitude(I, omega0, q0, M, dt, T):
     quat_hist = []
     time_hist = []
 
-    for i in range(steps):
-        t = i * dt
-        ωx, ωy, ωz = omega
-
-        # Equações diferenciais da velocidade angular (Eq. 4.44–4.46)
-        domega_x = (M[0] - (ωy * ωz * (Izz - Iyy))) / Ixx
-        domega_y = (M[1] - (ωz * ωx * (Ixx - Izz))) / Iyy
-        domega_z = (M[2] - (ωx * ωy * (Iyy - Ixx))) / Izz
-        domega = np.array([domega_x, domega_y, domega_z])
-
-        # Atualiza omega
-        omega += domega * dt
-
-        # Matriz Ω′ (Eq. 4.48)
+    # Funções auxiliares para cálculo das derivadas
+    def domega_dt(omega_vec):
+        ωx, ωy, ωz = omega_vec
+        dx = (M[0] - (ωy * ωz * (Izz - Iyy))) / Ixx
+        dy = (M[1] - (ωz * ωx * (Ixx - Izz))) / Iyy
+        dz = (M[2] - (ωx * ωy * (Iyy - Ixx))) / Izz
+        return np.array([dx, dy, dz])
+    
+    def dq_dt(omega_vec, q_vec):
+        ωx, ωy, ωz = omega_vec
         Omega_prime = np.array([
             [ 0,    ωz,  -ωy,  ωx],
             [-ωz,   0,   ωx,  ωy],
             [ ωy, -ωx,   0,   ωz],
             [-ωx, -ωy, -ωz,   0 ]
         ])
+        return 0.5 * Omega_prime @ q_vec
 
-        # Derivada do quaternion (Eq. 4.47)
-        dq = 0.5 * Omega_prime @ q
-
-        # Atualiza quaternion
-        q += dq * dt
-        q /= np.linalg.norm(q)  # normaliza
-
-        # Armazena histórico
+    for i in range(steps):
+        t = i * dt
         time_hist.append(t)
         omega_hist.append(omega.copy())
         quat_hist.append(q.copy())
+
+        # Integração RK4 para omega
+        k1_omega = domega_dt(omega)
+        k2_omega = domega_dt(omega + 0.5 * dt * k1_omega)
+        k3_omega = domega_dt(omega + 0.5 * dt * k2_omega)
+        k4_omega = domega_dt(omega + dt * k3_omega)
+        omega += (dt / 6.0) * (k1_omega + 2*k2_omega + 2*k3_omega + k4_omega)
+
+        # Integração RK4 para quaternion
+        k1_q = dq_dt(omega, q)
+        k2_q = dq_dt(omega, q + 0.5 * dt * k1_q)
+        k3_q = dq_dt(omega, q + 0.5 * dt * k2_q)
+        k4_q = dq_dt(omega, q + dt * k3_q)
+        q += (dt / 6.0) * (k1_q + 2*k2_q + 2*k3_q + k4_q)
+        
+        # Normalização do quaternion
+        q /= np.linalg.norm(q)
 
     return np.array(time_hist), np.array(omega_hist), np.array(quat_hist)

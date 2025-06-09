@@ -15,6 +15,9 @@ def field_calc(s, t, num_points, start_date):
     east_vals = []
     north_vals = []
     down_vals = []
+    lats = []
+    lons = []
+    alts = []
 
     # Simulação da órbita
     for i in range(num_points):
@@ -26,13 +29,14 @@ def field_calc(s, t, num_points, start_date):
 
         if e == 0:
             x, y, z = r
-            lat = np.degrees(np.arcsin(z / np.linalg.norm(r)))
+            norm_r = np.linalg.norm(r)
+            lat = np.degrees(np.arcsin(z / norm_r))
             lon = np.degrees(np.arctan2(y, x))
-            alt_km = np.linalg.norm(r) - 6371
+            alt_km = norm_r - 6371  # raio médio da Terra em km
 
             # Ano decimal
             year = current_time.year
-            day_of_year = current_time.timetuple().tm_yday + (current_time.hour / 24)
+            day_of_year = current_time.timetuple().tm_yday + (current_time.hour + current_time.minute/60 + current_time.second/3600)/24
             yeardec = year + (day_of_year / 365.25)
 
             # Campo magnético
@@ -43,8 +47,10 @@ def field_calc(s, t, num_points, start_date):
             north_vals.append(mag["north"].values.item() * 1e-5)
             down_vals.append(mag["down"].values.item() * 1e-5)
             times.append(current_time)
+            lats.append(lat)
+            lons.append(lon)
+            alts.append(alt_km)
         else:
             print(f"Erro na propagação SGP4 em {current_time}: código {e}")
 
-    return times, east_vals, north_vals, down_vals
-
+    return times, east_vals, north_vals, down_vals, lats, lons, alts
